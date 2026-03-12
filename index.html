@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Contra Squad - Mini Arena</title>
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      background: linear-gradient(to bottom, #1e3c72, #2a5298);
+      font-family: Arial, Helvetica, sans-serif;
+      color: white;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      image-rendering: pixelated;
+    }
+
+    h1 {
+      margin: 15px 0 5px;
+      font-size: 2.8rem;
+      text-shadow: 3px 3px 8px #000;
+    }
+
+    #info {
+      font-size: 1.4rem;
+      margin: 5px 0 15px;
+      text-shadow: 1px 1px 4px black;
+    }
+
+    #game {
+      position: relative;
+      width: 720px;
+      height: 480px;
+      background: #0d1b2a;
+      border: 6px solid #333;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 10px 40px #0008;
+    }
+
+    .player, .enemy {
+      position: absolute;
+      width: 50px;
+      height: 70px;
+      background: #444;
+      border-radius: 12px 12px 0 0;
+      transition: transform 0.08s;
+    }
+
+    .player {
+      background: linear-gradient(#ff6b6b, #c0392b);
+      bottom: 40px;
+      left: 100px;
+    }
+
+    .enemy {
+      background: linear-gradient(#4ecdc4, #2e8b57);
+      bottom: 200px;
+      right: 120px;
+    }
+
+    .player::before, .enemy::before {
+      content: "";
+      position: absolute;
+      width: 30px;
+      height: 12px;
+      background: #222;
+      top: -8px;
+      left: 10px;
+      border-radius: 6px;
+    }
+
+    .bullet {
+      position: absolute;
+      width: 12px;
+      height: 6px;
+      background: #ffeb3b;
+      border-radius: 6px;
+      box-shadow: 0 0 10px #ffeb3b;
+    }
+
+    .enemy-bullet {
+      background: #ff4757;
+      box-shadow: 0 0 10px #ff4757;
+    }
+
+    #health-bar-player, #health-bar-enemy {
+      position: absolute;
+      width: 200px;
+      height: 24px;
+      background: #333;
+      border: 3px solid #fff;
+      border-radius: 12px;
+      overflow: hidden;
+      top: 20px;
+    }
+
+    #health-bar-player { left: 30px; }
+    #health-bar-enemy  { right: 30px; }
+
+    #health-fill-player, #health-fill-enemy {
+      height: 100%;
+      width: 100%;
+      background: linear-gradient(to right, #2ecc71, #27ae60);
+      transition: width 0.4s;
+    }
+
+    #health-fill-enemy {
+      background: linear-gradient(to right, #e74c3c, #c0392b);
+    }
+
+    #game-over {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      font-size: 4rem;
+      text-shadow: 4px 4px 10px black;
+      z-index: 100;
+    }
+
+    button {
+      padding: 16px 50px;
+      font-size: 1.5rem;
+      margin: 20px;
+      background: #e74c3c;
+      color: white;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    button:hover { background: #c0392b; }
+  </style>
+</head>
+<body>
+
+  <h1>Contra Squad</h1>
+  <div id="info">Use WASD / Setas + ESPAÇO ou clique para atirar</div>
+
+  <div id="game">
+    <div id="health-bar-player"><div id="health-fill-player"></div></div>
+    <div id="health-bar-enemy"><div id="health-fill-enemy"></div></div>
+
+    <div class="player" id="player"></div>
+    <div class="enemy" id="enemy"></div>
+
+    <div id="game-over">
+      <div id="result"></div>
+      <button onclick="location.reload()">JOGAR NOVAMENTE</button>
+    </div>
+  </div>
+
+  <script>
+    const player = document.getElementById('player');
+    const enemy  = document.getElementById('enemy');
+    const game   = document.getElementById('game');
+    const hpPlayerFill = document.getElementById('health-fill-player');
+    const hpEnemyFill  = document.getElementById('health-fill-enemy');
+    const gameOver   = document.getElementById('game-over');
+    const resultText = document.getElementById('result');
+
+    let playerHP = 100;
+    let enemyHP  = 100;
+    let playerX  = 100;
+    let playerY  = 40;
+    const speed  = 5;
+
+    const keys = {};
+
+    window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+    window.addEventListener('keyup',   e => keys[e.key.toLowerCase()] = false);
+
+    // Atirar com espaço ou clique
+    window.addEventListener('keydown', e => {
+      if (e.code === 'Space') shootPlayer();
+    });
+    game.addEventListener('click', shootPlayer);
+
+    function updatePlayer() {
+      if (keys['w'] || keys['arrowup'])    playerY += speed;
+      if (keys['s'] || keys['arrowdown'])  playerY -= speed;
+      if (keys['a'] || keys['arrowleft'])  playerX -= speed;
+      if (keys['d'] || keys['arrowright']) playerX += speed;
+
+      // Limites da tela
+      playerX = Math.max(0, Math.min(670, playerX));
+      playerY = Math.max(0, Math.min(410, playerY));
+
+      player.style.left   = playerX + 'px';
+      player.style.bottom = playerY + 'px';
+    }
+
+    function shootPlayer() {
+      if (playerHP <= 0 || enemyHP <= 0) return;
+
+      const bullet = document.createElement('div');
+      bullet.className = 'bullet';
+      bullet.style.left = (playerX + 40) + 'px';
+      bullet.style.bottom = (playerY + 35) + 'px';
+      game.appendChild(bullet);
+
+      const interval = setInterval(() => {
+        let bx = parseFloat(bullet.style.left) + 12;
+        bullet.style.left = bx + 'px';
+
+        if (bx > 750) {
+          bullet.remove();
+          clearInterval(interval);
+          return;
+        }
+
+        // Colisão com inimigo
+        const ex = parseFloat(enemy.style.right) || 120;
+        const ey = parseFloat(enemy.style.bottom) || 200;
+
+        if (
+          bx > (720 - ex - 50) &&
+          bx < (720 - ex) &&
+          parseFloat(bullet.style.bottom) > ey &&
+          parseFloat(bullet.style.bottom) < ey + 70
+        ) {
+          enemyHP -= 18;
+          if (enemyHP < 0) enemyHP = 0;
+          hpEnemyFill.style.width = enemyHP + '%';
+          bullet.remove();
+          clearInterval(interval);
+
+          if (enemyHP <= 0) {
+            endGame("VOCÊ VENCEU!");
+          }
+        }
+      }, 20);
+    }
+
+    function enemyAI() {
+      if (playerHP <= 0 || enemyHP <= 0) return;
+
+      // Movimento simples do inimigo
+      let ex = parseFloat(enemy.style.right) || 120;
+      let ey = parseFloat(enemy.style.bottom) || 200;
+
+      if (playerX > 300) ex += 1.2;
+      if (playerX < 300) ex -= 1.2;
+
+      ex = Math.max(20, Math.min(300, ex));
+
+      enemy.style.right  = ex + 'px';
+      enemy.style.bottom = ey + 'px';
+
+      // Inimigo atira a cada ~1.5–2.5s
+      if (Math.random() < 0.015) {
+        const eBullet = document.createElement('div');
+        eBullet.className = 'bullet enemy-bullet';
+        eBullet.style.right = (ex + 10) + 'px';
+        eBullet.style.bottom = (ey + 35) + 'px';
+        game.appendChild(eBullet);
+
+        const eInterval = setInterval(() => {
+          let ebx = parseFloat(eBullet.style.right) + 12;
+          eBullet.style.right = ebx + 'px';
+
+          if (ebx > 750) {
+            eBullet.remove();
+            clearInterval(eInterval);
+            return;
+          }
+
+          // Colisão com player
+          if (
+            (720 - ebx) > playerX &&
+            (720 - ebx) < playerX + 50 &&
+            parseFloat(eBullet.style.bottom) > playerY &&
+            parseFloat(eBullet.style.bottom) < playerY + 70
+          ) {
+            playerHP -= 15;
+            if (playerHP < 0) playerHP = 0;
+            hpPlayerFill.style.width = playerHP + '%';
+            eBullet.remove();
+            clearInterval(eInterval);
+
+            if (playerHP <= 0) {
+              endGame("VOCÊ PERDEU...");
+            }
+          }
+        }, 20);
+      }
+    }
+
+    function endGame(message) {
+      resultText.textContent = message;
+      gameOver.style.display = 'flex';
+    }
+
+    function gameLoop() {
+      if (playerHP > 0 && enemyHP > 0) {
+        updatePlayer();
+        enemyAI();
+      }
+      requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
+  </script>
+
+</body>
+</html>
